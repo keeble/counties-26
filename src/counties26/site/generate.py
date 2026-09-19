@@ -20,6 +20,7 @@ DIVISION_TITLES = {"men": "Men's", "women": "Women's"}
 def build_site(conn: sqlite3.Connection, output_dir: str | Path) -> None:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    (output_path / ".nojekyll").touch()
 
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
