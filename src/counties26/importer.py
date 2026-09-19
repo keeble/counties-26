@@ -311,13 +311,14 @@ def commit_import(conn: sqlite3.Connection, csv_path: str | Path, report: Import
         conn.execute(
             """
             INSERT INTO bowler_scores
-                (fixture_id, team_id, play_position, bowler_name, scratch_score,
+                (fixture_id, team_id, lane, play_position, bowler_name, scratch_score,
                  start_date, end_date, source_file, imported_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 assignment.fixture_id,
                 assignment.team_id,
+                row.lane,
                 row.play_position,
                 row.bowler_name,
                 row.scratch,

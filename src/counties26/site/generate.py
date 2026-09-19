@@ -43,15 +43,16 @@ def build_site(conn: sqlite3.Connection, output_dir: str | Path) -> None:
             **page_data,
             generated_at=generated_at,
         )
+        html = html.replace('<details class="game" open>', '<details class="game">')
         (output_path / f"{division}.html").write_text(html)
         for team_id, team in page_data["team_links"].items():
-            (output_path / team["href"]).write_text(
-                team_template.render(
+            team_html = team_template.render(
                     division_title=title,
                     division=division,
                     generated_at=generated_at,
                     **team_page_data(conn, team_id),
-                )
             )
+            team_html = team_html.replace('<details class="game" open>', '<details class="game">')
+            (output_path / team["href"]).write_text(team_html)
 
     shutil.copy(STATIC_DIR / "style.css", output_path / "style.css")

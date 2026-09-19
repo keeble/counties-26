@@ -30,7 +30,7 @@ def team_standings(conn: sqlite3.Connection, division: str) -> list[TeamStanding
         TeamStanding(
             team_name=row["team_name"],
             played=row["played"],
-            total_points=row["total_points"],
+            total_points=int(row["total_points"]),
             total_pinfall=row["total_pinfall"],
         )
         for row in rows

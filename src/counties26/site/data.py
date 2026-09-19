@@ -45,15 +45,15 @@ class FixtureView:
         )
 
 
-def team_slug(team_id: int, team_name: str) -> str:
+def team_slug(team_id: int, division: str, team_name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", team_name.lower()).strip("-")
-    return f"team-{team_id}-{slug or 'team'}"
+    return f"team-{division}-{team_id}-{slug or 'team'}"
 
 
 def _score_rows(conn: sqlite3.Connection, fixture_id: int, team_id: int) -> dict[int, sqlite3.Row]:
     rows = conn.execute(
         """
-        SELECT play_position, bowler_name, scratch_score
+        SELECT play_position, bowler_name, scratch_score, lane
         FROM bowler_scores
         WHERE fixture_id = ? AND team_id = ?
         ORDER BY play_position
@@ -87,7 +87,7 @@ def _fixture_view(conn: sqlite3.Connection, row: sqlite3.Row) -> FixtureView:
                 team_b_bonus=bonus_b,
             )
         )
-    return FixtureView(
+    fixture = FixtureView(
         fixture_id=row["fixture_id"],
         round_number=row["round_number"],
         lane_a=row["lane_a"],
@@ -98,9 +98,39 @@ def _fixture_view(conn: sqlite3.Connection, row: sqlite3.Row) -> FixtureView:
         team_b_name=row["team_b_name"],
         team_a_pinfall=row["team_a_pinfall"],
         team_b_pinfall=row["team_b_pinfall"],
-        team_a_points=row["team_a_points"],
-        team_b_points=row["team_b_points"],
+        team_a_points=(int(row["team_a_points"]) if row["team_a_points"] is not None else None),
+        team_b_points=(int(row["team_b_points"]) if row["team_b_points"] is not None else None),
         matchups=matchups,
+    )
+    return fixture
+
+
+def _flip_fixture(fixture: FixtureView) -> FixtureView:
+    return FixtureView(
+        fixture_id=fixture.fixture_id,
+        round_number=fixture.round_number,
+        lane_a=fixture.lane_b,
+        lane_b=fixture.lane_a,
+        team_a_id=fixture.team_b_id,
+        team_a_name=fixture.team_b_name,
+        team_b_id=fixture.team_a_id,
+        team_b_name=fixture.team_a_name,
+        team_a_pinfall=fixture.team_b_pinfall,
+        team_b_pinfall=fixture.team_a_pinfall,
+        team_a_points=fixture.team_b_points,
+        team_b_points=fixture.team_a_points,
+        matchups=[
+            PlayerMatchup(
+                position=matchup.position,
+                team_a_bowler=matchup.team_b_bowler,
+                team_a_score=matchup.team_b_score,
+                team_b_bowler=matchup.team_a_bowler,
+                team_b_score=matchup.team_a_score,
+                team_a_bonus=matchup.team_b_bonus,
+                team_b_bonus=matchup.team_a_bonus,
+            )
+            for matchup in fixture.matchups
+        ],
     )
 
 
@@ -135,7 +165,10 @@ def division_page_data(conn: sqlite3.Connection, division: str) -> dict[str, obj
         "SELECT id, name FROM teams WHERE division = ? ORDER BY name", (division,)
     ).fetchall()
     team_links = {
-        row["id"]: {"name": row["name"], "href": f"{team_slug(row['id'], row['name'])}.html"}
+        row["id"]: {
+            "name": row["name"],
+            "href": f"{team_slug(row['id'], division, row['name'])}.html",
+        }
         for row in teams
     }
     team_id_by_name = {row["name"]: row["id"] for row in teams}

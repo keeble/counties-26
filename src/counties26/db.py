@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS bowler_scores (
     id INTEGER PRIMARY KEY,
     fixture_id INTEGER NOT NULL REFERENCES fixtures (id) ON DELETE CASCADE,
     team_id INTEGER NOT NULL REFERENCES teams (id),
+    lane INTEGER,
     play_position INTEGER NOT NULL,
     bowler_name TEXT NOT NULL,
     scratch_score INTEGER NOT NULL,
@@ -93,4 +94,7 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     """Create all tables if they don't already exist."""
     conn.executescript(SCHEMA_SQL)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(bowler_scores)")}
+    if "lane" not in columns:
+        conn.execute("ALTER TABLE bowler_scores ADD COLUMN lane INTEGER")
     conn.commit()
