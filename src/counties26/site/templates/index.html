@@ -2,14 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>County Championships 2026</title>
+<title>County Championships 2026 | Live standings</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>County Championships 2026</h1>
-<nav>
-  <a href="men.html">Men's standings</a> &middot; <a href="women.html">Women's standings</a>
-</nav>
-<p>Generated {{ generated_at }}.</p>
+<main class="shell landing">
+  <p class="eyebrow">County Championships / 2026</p>
+  <h1>Every frame.<br><em>Every result.</em></h1>
+  <p class="intro">Live tournament standings, player averages, match breakdowns and lane draws.</p>
+  <div class="division-links">
+    {% for division, title in divisions.items() %}
+    <a class="division-link" href="{{ division }}.html">
+      <span>{{ title }} competition</span><strong>View standings <span aria-hidden="true">-&gt;</span></strong>
+    </a>
+    {% endfor %}
+  </div>
+  <p class="generated">Updated {{ generated_at }}</p>
+</main>
 </body>
 </html>

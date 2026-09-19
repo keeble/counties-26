@@ -2,24 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{{ division_title }} standings — County Championships 2026</title>
+<title>{{ division_title }} standings | County Championships 2026</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>County Championships 2026</h1>
-<nav>
-  <a href="men.html">Men's standings</a> &middot; <a href="women.html">Women's standings</a>
-</nav>
-
-<h2>{{ division_title }} — team standings</h2>
-<table>
+<main class="shell">
+<nav class="topbar"><a class="wordmark" href="index.html">County / 26</a><span><a href="men.html">Men</a><a href="women.html">Women</a></span></nav>
+<header class="page-header"><p class="eyebrow">{{ division_title }} competition</p><h1>Standings &amp; scorecards</h1><p>Team points at a glance, then the complete lane-by-lane story of every round.</p></header>
+<section class="section-block"><div class="section-heading"><div><p class="eyebrow">01 / leaderboard</p><h2>Team standings</h2></div><span class="section-note">{{ standings|length }} teams</span></div>
+<table class="data-table">
   <thead>
     <tr><th>Team</th><th>Played</th><th>Points</th><th>Pinfall</th></tr>
   </thead>
   <tbody>
     {% for team in standings %}
     <tr>
-      <td>{{ team.team_name }}</td>
+      <td><a class="team-name" href="{{ team.href }}">{{ team.team_name }}</a></td>
       <td>{{ team.played }}</td>
       <td>{{ team.total_points }}</td>
       <td>{{ team.total_pinfall }}</td>
@@ -27,9 +25,10 @@
     {% endfor %}
   </tbody>
 </table>
+</section>
 
-<h2>{{ division_title }} — bowler averages</h2>
-<table>
+<section class="section-block"><div class="section-heading"><div><p class="eyebrow">02 / individual form</p><h2>Bowler averages</h2></div></div>
+<table class="data-table compact">
   <thead>
     <tr><th>Bowler</th><th>Team</th><th>Games</th><th>Average</th><th>High score</th></tr>
   </thead>
@@ -46,6 +45,11 @@
   </tbody>
 </table>
 
-<p>Generated {{ generated_at }}.</p>
+<div class="section-heading games-heading"><div><p class="eyebrow">03 / the draw</p><h2>Game-by-game scorecards</h2></div><span class="section-note">Select a round to open</span></div>
+<div class="games">{% for fixture in fixtures %}<details class="game" {% if loop.last %}open{% endif %}><summary><span class="round-label">Round {{ fixture.round_number }} <small>lanes {{ fixture.lane_a }} &amp; {{ fixture.lane_b }}</small></span><span class="match-title">{{ fixture.team_a_name }} <b>vs</b> {{ fixture.team_b_name }}</span><span class="match-result">{% if fixture.complete %}{{ fixture.team_a_points }} - {{ fixture.team_b_points }} pts{% else %}Awaiting scores{% endif %}</span></summary><div class="game-body"><div class="score-banner"><span><strong>{{ fixture.team_a_name }}</strong> {{ fixture.team_a_pinfall if fixture.team_a_pinfall is not none else '-' }}</span><span class="versus">vs</span><span>{{ fixture.team_b_pinfall if fixture.team_b_pinfall is not none else '-' }} <strong>{{ fixture.team_b_name }}</strong></span></div>{% if fixture.matchups %}<table class="data-table score-table"><thead><tr><th>#</th><th>{{ fixture.team_a_name }}</th><th>Bonus</th><th>{{ fixture.team_b_name }}</th><th>Bonus</th></tr></thead><tbody>{% for matchup in fixture.matchups %}<tr><td>{{ matchup.position }}</td><td>{{ matchup.team_a_bowler }} <b>{{ matchup.team_a_score if matchup.team_a_score is not none else '-' }}</b></td><td>{{ matchup.team_a_bonus if matchup.team_a_bonus is not none else '-' }}</td><td>{{ matchup.team_b_bowler }} <b>{{ matchup.team_b_score if matchup.team_b_score is not none else '-' }}</b></td><td>{{ matchup.team_b_bonus if matchup.team_b_bonus is not none else '-' }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="empty">No scores have been imported for this game yet.</p>{% endif %}</div></details>{% endfor %}</div>
+</section>
+
+<p class="generated">Generated {{ generated_at }}.</p>
+</main>
 </body>
 </html>
