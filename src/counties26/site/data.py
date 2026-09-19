@@ -172,6 +172,15 @@ def team_page_data(conn: sqlite3.Connection, team_id: int) -> dict[str, object]:
     team_bowlers = [
         stat for stat in division_data["bowlers"] if stat.team_name == team["name"]
     ]
+    roster = conn.execute(
+        """
+        SELECT play_position, name
+        FROM players
+        WHERE team_id = ?
+        ORDER BY play_position
+        """,
+        (team_id,),
+    ).fetchall()
     standing = next(
         standing for standing in division_data["standings"] if standing["team_name"] == team["name"]
     )
@@ -179,6 +188,7 @@ def team_page_data(conn: sqlite3.Connection, team_id: int) -> dict[str, object]:
         "team": team,
         "standing": standing,
         "bowlers": team_bowlers,
+        "roster": roster,
         "fixtures": fixtures,
         "team_links": division_data["team_links"],
     }

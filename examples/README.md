@@ -6,9 +6,9 @@ Run these commands from the repository root. The database is disposable, so remo
 rm -f examples/dummy.db
 
 counties26 import-draw examples/men_grid.csv examples/men_teams.csv \
-  --division men --db examples/dummy.db
+  --players examples/men_players.csv --division men --db examples/dummy.db
 counties26 import-draw examples/women_grid.csv examples/women_teams.csv \
-  --division women --db examples/dummy.db
+  --players examples/women_players.csv --division women --db examples/dummy.db
 
 counties26 import examples/men_scores_round1.csv \
   --round 1 --game 1 --division men --db examples/dummy.db --yes
@@ -26,3 +26,14 @@ example score files do not include a `Game number` column, so the option is igno
 them. The original centre export does include that column and will be filtered by it.
 Each score file has the correct lineup size, so the import should report no warnings.
 Re-run either import command to see duplicate detection.
+
+The player registry files use this format:
+
+```text
+team_number,play_position,player_name
+1,1,Alex Morgan
+```
+
+The roster is imported with the draw and appears on each team's page. The centre
+export remains the source of the names attached to actual scores, which allows
+substitutes to be recorded when necessary.

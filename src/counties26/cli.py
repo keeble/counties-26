@@ -29,11 +29,14 @@ def import_draw_cmd(
     grid_csv: Path,
     teams_csv: Path,
     division: str = typer.Option(..., help="'men' or 'women'"),
+    players_csv: Optional[Path] = typer.Option(
+        None, "--players", help="Optional starting roster CSV"
+    ),
     db_path: Path = DB_OPTION,
 ) -> None:
     """Import the lane draw (grid + team registry) for one division."""
     conn = _connect(db_path)
-    warnings = import_draw(conn, grid_csv, teams_csv, division)
+    warnings = import_draw(conn, grid_csv, teams_csv, division, players_csv)
     if warnings:
         typer.secho("Warnings:", fg=typer.colors.YELLOW, bold=True)
         for warning in warnings:

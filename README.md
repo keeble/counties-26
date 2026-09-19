@@ -19,8 +19,8 @@ round, computes standings, and builds a static site for publishing to GitHub Pag
 pip install -e ".[test]"
 
 # One-time: import the draw for each division
-counties26 import-draw men_draw.csv men_teams.csv --division men
-counties26 import-draw women_draw.csv women_teams.csv --division women
+counties26 import-draw men_draw.csv men_teams.csv --players men_players.csv --division men
+counties26 import-draw women_draw.csv women_teams.csv --players women_players.csv --division women
 
 # After each tournament game is bowled. `--round` is the tournament game/fixture;
 # `--game` selects that game within the centre's cumulative export block.

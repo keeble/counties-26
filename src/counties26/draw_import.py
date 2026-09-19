@@ -24,6 +24,13 @@ class TeamInfo:
     team_size: int
 
 
+@dataclass(frozen=True)
+class PlayerInfo:
+    team_number: int
+    play_position: int
+    name: str
+
+
 def parse_grid(path: str | Path) -> list[list[int]]:
     """Parse the lane draw grid: one row per round, one column per lane."""
     rows: list[list[int]] = []
@@ -49,6 +56,22 @@ def parse_team_registry(path: str | Path, default_team_size: int) -> dict[int, T
             team_size = int(size_field) if size_field else default_team_size
             teams[team_number] = TeamInfo(team_number=team_number, name=name, team_size=team_size)
     return teams
+
+
+def parse_player_registry(path: str | Path) -> list[PlayerInfo]:
+    """Parse team_number,play_position,player_name rows for the starting roster."""
+    players: list[PlayerInfo] = []
+    with open(path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            players.append(
+                PlayerInfo(
+                    team_number=int(row["team_number"]),
+                    play_position=int(row["play_position"]),
+                    name=row["player_name"].strip(),
+                )
+            )
+    return players
 
 
 def validate_round_robin(rows: list[list[int]]) -> list[str]:
@@ -103,6 +126,7 @@ def import_draw(
     grid_path: str | Path,
     teams_path: str | Path,
     division: str,
+    players_path: str | Path | None = None,
 ) -> list[str]:
     """Import a division's draw. Returns validation warnings (import still proceeds)."""
     require_division(division)
@@ -110,6 +134,7 @@ def import_draw(
 
     rows = parse_grid(grid_path)
     teams = parse_team_registry(teams_path, default_team_size)
+    players = parse_player_registry(players_path) if players_path else []
     warnings = validate_round_robin(rows)
 
     team_numbers_in_grid = {t for row in rows for t in row}
@@ -142,6 +167,51 @@ def import_draw(
             (division, team_number),
         ).fetchone()["id"]
         team_id_by_number[team_number] = team_id
+
+    player_team_ids = set(team_id_by_number.values())
+    if players:
+        conn.execute(
+            "DELETE FROM players WHERE team_id IN ({})".format(
+                ",".join("?" for _ in player_team_ids)
+            ),
+            tuple(player_team_ids),
+        )
+        positions_by_team: dict[int, set[int]] = {}
+        for player in players:
+            if player.team_number not in team_id_by_number:
+                warnings.append(
+                    f"Player {player.name!r} references unknown team number "
+                    f"{player.team_number}"
+                )
+                continue
+            team_id = team_id_by_number[player.team_number]
+            team_size = teams[player.team_number].team_size
+            if not 1 <= player.play_position <= team_size:
+                warnings.append(
+                    f"{player.name!r} on team {player.team_number} has play position "
+                    f"{player.play_position}; expected 1-{team_size}"
+                )
+                continue
+            positions = positions_by_team.setdefault(team_id, set())
+            if player.play_position in positions:
+                warnings.append(
+                    f"Team {player.team_number} has duplicate player position "
+                    f"{player.play_position}"
+                )
+                continue
+            positions.add(player.play_position)
+            conn.execute(
+                "INSERT INTO players (team_id, play_position, name) VALUES (?, ?, ?)",
+                (team_id, player.play_position, player.name),
+            )
+        for team_number, info in teams.items():
+            if team_number in team_numbers_in_grid:
+                actual = len(positions_by_team.get(team_id_by_number[team_number], set()))
+                if actual != info.team_size:
+                    warnings.append(
+                        f"Team {team_number} roster has {actual} players, "
+                        f"expected {info.team_size}"
+                    )
 
     for round_number, row in enumerate(rows, start=1):
         round_id = conn.execute(
