@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ division_title }} standings — County Championships 2026</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>County Championships 2026</h1>
+<nav>
+  <a href="men.html">Men's standings</a> &middot; <a href="women.html">Women's standings</a>
+</nav>
+
+<h2>{{ division_title }} — team standings</h2>
+<table>
+  <thead>
+    <tr><th>Team</th><th>Played</th><th>Points</th><th>Pinfall</th></tr>
+  </thead>
+  <tbody>
+    {% for team in standings %}
+    <tr>
+      <td>{{ team.team_name }}</td>
+      <td>{{ team.played }}</td>
+      <td>{{ team.total_points }}</td>
+      <td>{{ team.total_pinfall }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>{{ division_title }} — bowler averages</h2>
+<table>
+  <thead>
+    <tr><th>Bowler</th><th>Team</th><th>Games</th><th>Average</th><th>High score</th></tr>
+  </thead>
+  <tbody>
+    {% for bowler in bowlers %}
+    <tr>
+      <td>{{ bowler.bowler_name }}</td>
+      <td>{{ bowler.team_name }}</td>
+      <td>{{ bowler.games_played }}</td>
+      <td>{{ bowler.average }}</td>
+      <td>{{ bowler.high_score }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p>Generated {{ generated_at }}.</p>
+</body>
+</html>
