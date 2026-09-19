@@ -44,14 +44,19 @@ def import_draw_cmd(
 @app.command("import")
 def import_cmd(
     csv_path: Path,
-    round: int = typer.Option(..., "--round", help="Tournament round number"),
+    round: int = typer.Option(
+        ..., "--round", "--tournament-game", help="Tournament game/round number"
+    ),
+    game: int = typer.Option(
+        ..., "--game", help="Game number within the centre's exported game block"
+    ),
     division: str = typer.Option(..., help="'men' or 'women'"),
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt"),
     db_path: Path = DB_OPTION,
 ) -> None:
     """Import a round of lane-software scores, after showing a validation report."""
     conn = _connect(db_path)
-    report = build_import_report(conn, csv_path, division, round)
+    report = build_import_report(conn, csv_path, division, round, block_game=game)
 
     typer.echo(report.summary())
     if report.rows_new == 0:

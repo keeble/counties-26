@@ -22,8 +22,9 @@ pip install -e ".[test]"
 counties26 import-draw men_draw.csv men_teams.csv --division men
 counties26 import-draw women_draw.csv women_teams.csv --division women
 
-# After each round is bowled
-counties26 import scores.csv --round 3 --division men
+# After each tournament game is bowled. `--round` is the tournament game/fixture;
+# `--game` selects that game within the centre's cumulative export block.
+counties26 import scores.csv --round 4 --game 1 --division men
 
 # Anytime
 counties26 show-standings --division men

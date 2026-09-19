@@ -29,6 +29,7 @@ class ScoreRow:
     bowler_name: str
     play_position: int
     scratch: int
+    game_number: int | None
     start_date: str
     end_date: str
 
@@ -45,6 +46,7 @@ class LaneAssignment:
 class ImportReport:
     rows_in_file: int = 0
     rows_other_division: int = 0
+    rows_other_game: int = 0
     rows_team_mismatch: int = 0
     rows_duplicate: int = 0
     rows_new: int = 0
@@ -56,6 +58,7 @@ class ImportReport:
     def summary(self) -> str:
         lines = [
             f"Rows in file: {self.rows_in_file}",
+            f"Ignored (other game in block): {self.rows_other_game}",
             f"Ignored (other division's lanes): {self.rows_other_division}",
             f"Ignored (team name mismatch for that lane): {self.rows_team_mismatch}",
             f"Already imported (duplicate): {self.rows_duplicate}",
@@ -80,6 +83,11 @@ def parse_score_csv(path: str | Path) -> list[ScoreRow]:
                     bowler_name=raw["Bowler name"].strip(),
                     play_position=int(raw["Play position"]),
                     scratch=int(raw["Scratch"]),
+                    game_number=(
+                        int(raw["Game number"])
+                        if raw.get("Game number", "").strip()
+                        else None
+                    ),
                     start_date=raw["Start date"].strip(),
                     end_date=raw["End date"].strip(),
                 )
@@ -139,7 +147,11 @@ def _already_imported(conn: sqlite3.Connection, team_id: int, bowler_name: str, 
 
 
 def build_import_report(
-    conn: sqlite3.Connection, csv_path: str | Path, division: str, round_number: int
+    conn: sqlite3.Connection,
+    csv_path: str | Path,
+    division: str,
+    round_number: int,
+    block_game: int | None = None,
 ) -> ImportReport:
     require_division(division)
     lanes = _lane_assignments(conn, division, round_number)
@@ -148,10 +160,21 @@ def build_import_report(
     rows = parse_score_csv(csv_path)
     report = ImportReport(rows_in_file=len(rows))
 
+    game_numbers = {row.game_number for row in rows if row.game_number is not None}
+    if block_game is None and len(game_numbers) > 1:
+        report.warnings.append(
+            f"This export contains multiple games in the block ({sorted(game_numbers)}); "
+            "specify --game to select one before importing"
+        )
+        return report
+
     matched_by_team: dict[int, list[ScoreRow]] = {}
     teams_with_data: set[tuple[int, int]] = set()
 
     for row in rows:
+        if block_game is not None and row.game_number is not None and row.game_number != block_game:
+            report.rows_other_game += 1
+            continue
         if row.lane not in division_lanes:
             report.rows_other_division += 1
             continue

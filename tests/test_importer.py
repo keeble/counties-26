@@ -2,7 +2,7 @@ import sqlite3
 
 from counties26 import db
 from counties26.draw_import import import_draw
-from counties26.importer import build_import_report, commit_import
+from counties26.importer import build_import_report, commit_import, parse_score_csv
 
 
 def _setup_draw(tmp_path, conn, division, team_numbers):
@@ -64,6 +64,52 @@ def test_import_new_round_computes_match_points(tmp_path):
         "Team 1": 1100.0,
         "Team 2": 950.0,
     }
+
+
+def test_original_export_columns_and_block_game_filter(tmp_path):
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    _setup_draw(tmp_path, conn, "men", [1, 2])
+
+    csv_path = tmp_path / "centre-export.csv"
+    csv_path.write_text(
+        "Open mode,Game number,Lane number,Bowler name,Play position,Scratch,Team name,Start date,End date\n"
+        "Open pair,1,1,A,1,200,Team 1,2026-06-01 10:00,2026-06-01 10:30\n"
+        "Open pair,1,2,B,1,190,Team 2,2026-06-01 10:00,2026-06-01 10:30\n"
+        "Open pair,2,1,A,1,180,Team 1,2026-06-01 11:00,2026-06-01 11:30\n"
+        "Open pair,2,2,B,1,170,Team 2,2026-06-01 11:00,2026-06-01 11:30\n"
+    )
+
+    rows = parse_score_csv(csv_path)
+    assert len(rows) == 4
+    assert rows[0].game_number == 1
+
+    report = build_import_report(conn, csv_path, "men", 1, block_game=1)
+    assert report.rows_in_file == 4
+    assert report.rows_other_game == 2
+    assert report.rows_new == 2
+
+
+def test_multiple_block_games_require_selection(tmp_path):
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    _setup_draw(tmp_path, conn, "men", [1, 2])
+
+    rows = _score_csv_rows(1, "Team 1", [200] * 5) + _score_csv_rows(2, "Team 2", [190] * 5)
+    csv_path = tmp_path / "cumulative.csv"
+    header = "Game number,Lane number,Team name,Bowler name,Play position,Scratch,Start date,End date\n"
+    game_rows = []
+    for game_number, start_date in ((1, "2026-06-01 10:00"), (2, "2026-06-01 11:00")):
+        for row in rows:
+            game_rows.append(
+                f"{game_number},{row['Lane number']},{row['Team name']},{row['Bowler name']},"
+                f"{row['Play position']},{row['Scratch']},{start_date},{row['End date']}"
+            )
+    csv_path.write_text(header + "\n".join(game_rows))
+
+    report = build_import_report(conn, csv_path, "men", 1)
+    assert report.rows_new == 0
+    assert any("specify --game" in warning for warning in report.warnings)
 
 
 def test_reimport_same_file_is_idempotent(tmp_path):
