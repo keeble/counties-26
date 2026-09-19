@@ -9,6 +9,7 @@ from typing import Optional
 import typer
 
 from counties26 import db
+from counties26.announcement import format_announcement
 from counties26.draw_import import import_draw
 from counties26.importer import build_import_report, commit_import, write_unknown_aliases
 from counties26.players import add_player_alias
@@ -161,6 +162,15 @@ def show_standings_cmd(
             f"  {bowler.bowler_name:<20} {bowler.team_name:<24} "
             f"games={bowler.games_played:<3} avg={bowler.average:<6} high={bowler.high_score}"
         )
+
+
+@app.command("announce-winners")
+def announce_winners_cmd(
+    db_path: Path = DB_OPTION,
+) -> None:
+    """Print the PA-ready final-place announcement for women and men."""
+    conn = _connect(db_path)
+    typer.echo(format_announcement(conn))
 
 
 @app.command("build-site")
