@@ -95,6 +95,66 @@ def test_original_export_columns_and_block_game_filter(tmp_path):
     assert report.rows_new == 2
 
 
+def test_swapped_physical_lanes_are_resolved_per_fixture_by_player_roster(tmp_path):
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    grid_path = tmp_path / "grid.csv"
+    teams_path = tmp_path / "teams.csv"
+    players_path = tmp_path / "players.csv"
+    grid_path.write_text("1,2")
+    teams_path.write_text("team_number,team_name,team_size\n1,Team 1,2\n2,Team 2,2\n")
+    players_path.write_text(
+        "team_number,player_name\n1,Alice One\n1,Bob One\n"
+        "2,Carol Two\n2,Dan Two\n"
+    )
+    import_draw(conn, grid_path, teams_path, "men", players_path)
+
+    rows = _score_csv_rows(1, "anything", [190, 180])
+    rows[0]["Bowler name"], rows[1]["Bowler name"] = "Carol Two", "Dan Two"
+    rows += _score_csv_rows(2, "anything", [210, 200])
+    rows[2]["Bowler name"], rows[3]["Bowler name"] = "Alice One", "Bob One"
+    csv_path = tmp_path / "swapped.csv"
+    _write_csv(csv_path, rows)
+
+    report = build_import_report(conn, csv_path, "men", 1)
+    assert report.rows_new == 4
+    assert report.rows_player_mismatch == 0
+    commit_import(conn, csv_path, report)
+
+    scores = conn.execute(
+        "SELECT t.name, SUM(bs.scratch_score) AS total "
+        "FROM bowler_scores bs JOIN teams t ON t.id = bs.team_id "
+        "GROUP BY t.name ORDER BY t.name"
+    ).fetchall()
+    assert [(row["name"], row["total"]) for row in scores] == [
+        ("Team 1", 410),
+        ("Team 2", 370),
+    ]
+
+
+def test_swap_lanes_assigns_scores_to_the_opposite_draw_team(tmp_path):
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    _setup_draw(tmp_path, conn, "men", [1, 2])
+    rows = _score_csv_rows(1, "anything", [190] * 5) + _score_csv_rows(2, "anything", [210] * 5)
+    csv_path = tmp_path / "swapped.csv"
+    _write_csv(csv_path, rows)
+
+    report = build_import_report(conn, csv_path, "men", 1, swap_lanes=True)
+    assert report.rows_new == 10
+    commit_import(conn, csv_path, report)
+
+    scores = conn.execute(
+        "SELECT t.name, SUM(bs.scratch_score) AS total "
+        "FROM bowler_scores bs JOIN teams t ON t.id = bs.team_id "
+        "GROUP BY t.name ORDER BY t.name"
+    ).fetchall()
+    assert [(row["name"], row["total"]) for row in scores] == [
+        ("Team 1", 1050),
+        ("Team 2", 950),
+    ]
+
+
 def test_known_player_alias_resolves_to_canonical_roster_name(tmp_path):
     conn = db.connect(":memory:")
     db.init_db(conn)
@@ -256,8 +316,8 @@ def test_team_name_mismatch_is_flagged(tmp_path):
     _write_csv(csv_path, rows)
 
     report = build_import_report(conn, csv_path, "men", 1)
-    assert report.rows_team_mismatch == 5
-    assert any("expected team" in w for w in report.warnings)
+    assert report.rows_new == 10
+    assert report.warnings == []
 
 
 def test_missing_game_is_flagged(tmp_path):

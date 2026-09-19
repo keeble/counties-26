@@ -6,9 +6,9 @@ Run these commands from the repository root. The database is disposable, so remo
 rm -f examples/dummy.db
 
 counties26 import-draw examples/men_grid.csv examples/men_teams.csv \
-  --players examples/men_players.csv --division men --db examples/dummy.db
+  --players examples/men_players.csv --division men --first-lane 1 --db examples/dummy.db
 counties26 import-draw examples/women_grid.csv examples/women_teams.csv \
-  --players examples/women_players.csv --division women --db examples/dummy.db
+  --players examples/women_players.csv --division women --first-lane 5 --db examples/dummy.db
 
 counties26 import examples/men_scores_round1.csv \
   --round 1 --game 1 --division men --db examples/dummy.db --yes
@@ -26,6 +26,16 @@ example score files do not include a `Game number` column, so the option is igno
 them. The original centre export does include that column and will be filtered by it.
 Each score file has the correct lineup size, so the import should report no warnings.
 Re-run either import command to see duplicate detection.
+
+`--first-lane` maps grid column 1 to the physical centre lane used by that
+division. Configure it separately for each division when both competitions run
+at the same time.
+
+With both rosters loaded, the importer compares the player names on each physical
+lane against both teams in each fixture and chooses the stronger orientation
+independently for every lane pair. Use `--swap-lanes` only as a forced override
+when roster matching cannot resolve a pair; it affects only that import and does
+not change the stored draw.
 
 To teach the importer a known centre abbreviation, add it once after importing
 the roster:
@@ -51,13 +61,16 @@ counties26 add-aliases unknown_players.csv --db examples/dummy.db
 The player registry files use this format:
 
 ```text
-team_number,play_position,player_name
-1,1,Alex Morgan
+team_number,player_name
+1,Alex Morgan
 ```
 
 The roster is imported with the draw and appears on each team's page. The centre
 export remains the source of the names attached to actual scores, which allows
 substitutes to be recorded when necessary.
+
+The two teams in a fixture may swap physical lanes. With a roster loaded, player
+names identify the team, so lane 1 versus lane 2 orientation does not matter.
 
 Add a known centre abbreviation once, after importing the roster:
 

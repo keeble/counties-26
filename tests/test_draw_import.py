@@ -35,6 +35,15 @@ def test_validate_round_robin_accepts_the_complete_example():
     assert validate_round_robin(COMPLETE_GRID) == []
 
 
+def test_parse_grid_accepts_utf8_bom(tmp_path):
+    grid_path = tmp_path / "bom-grid.csv"
+    grid_path.write_text("6,7\n8,9\n", encoding="utf-8-sig")
+
+    from counties26.draw_import import parse_grid
+
+    assert parse_grid(grid_path) == [[6, 7], [8, 9]]
+
+
 def test_validate_round_robin_flags_a_missing_round():
     assert validate_round_robin(COMPLETE_GRID[:-1]) != []
 
@@ -81,6 +90,20 @@ def test_import_draw_builds_expected_fixtures(tmp_path):
     assert (fixture["lane_a"], fixture["lane_b"]) == (1, 2)
 
 
+def test_import_draw_maps_grid_columns_to_physical_first_lane(tmp_path):
+    grid_path = tmp_path / "grid.csv"
+    teams_path = tmp_path / "teams.csv"
+    _write_grid(grid_path, [[1, 2]])
+    _write_teams(teams_path, 2)
+
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    import_draw(conn, grid_path, teams_path, "men", first_lane=11)
+
+    lanes = conn.execute("SELECT lane_a, lane_b FROM fixtures").fetchone()
+    assert (lanes["lane_a"], lanes["lane_b"]) == (11, 12)
+
+
 def test_import_draw_loads_starting_player_roster(tmp_path):
     grid_path = tmp_path / "grid.csv"
     teams_path = tmp_path / "teams.csv"
@@ -88,22 +111,26 @@ def test_import_draw_loads_starting_player_roster(tmp_path):
     _write_grid(grid_path, [[1, 2]])
     _write_teams(teams_path, 2)
     players_path.write_text(
-        "team_number,play_position,player_name\n"
-        "1,1,Alice Example\n1,2,Bob Example\n"
-        "2,1,Carol Example\n2,2,Dan Example\n"
+        "team_number,player_name\n"
+        "1,Alice Example\n1,Bob Example\n1,Erin Example\n"
+        "2,Carol Example\n2,Dan Example\n"
     )
 
     conn = db.connect(":memory:")
     db.init_db(conn)
     warnings = import_draw(conn, grid_path, teams_path, "men", players_path)
 
-    assert any("roster has 2 players" in warning for warning in warnings)
-    assert len(parse_player_registry(players_path)) == 4
+    assert warnings == []
+    assert len(parse_player_registry(players_path)) == 5
     players = conn.execute(
         "SELECT p.name FROM players p JOIN teams t ON t.id = p.team_id "
         "WHERE t.team_number = 1 ORDER BY p.play_position"
     ).fetchall()
-    assert [row["name"] for row in players] == ["Alice Example", "Bob Example"]
+    assert [row["name"] for row in players] == [
+        "Alice Example",
+        "Bob Example",
+        "Erin Example",
+    ]
 
 
 def test_add_player_alias_is_normalized_and_idempotent(tmp_path):
@@ -113,9 +140,9 @@ def test_add_player_alias_is_normalized_and_idempotent(tmp_path):
     _write_grid(grid_path, [[1, 2]])
     _write_teams(teams_path, 2)
     players_path.write_text(
-        "team_number,play_position,player_name\n"
-        "1,1,Alice Example\n1,2,Bob Example\n"
-        "2,1,Carol Example\n2,2,Dan Example\n"
+        "team_number,player_name\n"
+        "1,Alice Example\n1,Bob Example\n"
+        "2,Carol Example\n2,Dan Example\n"
     )
 
     conn = db.connect(":memory:")

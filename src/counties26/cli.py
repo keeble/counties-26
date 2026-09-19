@@ -35,11 +35,14 @@ def import_draw_cmd(
     players_csv: Optional[Path] = typer.Option(
         None, "--players", help="Optional starting roster CSV"
     ),
+    first_lane: int = typer.Option(
+        1, "--first-lane", help="Physical centre lane represented by grid column 1"
+    ),
     db_path: Path = DB_OPTION,
 ) -> None:
     """Import the lane draw (grid + team registry) for one division."""
     conn = _connect(db_path)
-    warnings = import_draw(conn, grid_csv, teams_csv, division, players_csv)
+    warnings = import_draw(conn, grid_csv, teams_csv, division, players_csv, first_lane)
     if warnings:
         typer.secho("Warnings:", fg=typer.colors.YELLOW, bold=True)
         for warning in warnings:
@@ -56,6 +59,11 @@ def import_cmd(
     game: int = typer.Option(
         ..., "--game", help="Game number within the centre's exported game block"
     ),
+    swap_lanes: bool = typer.Option(
+        False,
+        "--swap-lanes",
+        help="Assign the first physical lane to the second draw team, and vice versa",
+    ),
     division: str = typer.Option(..., help="'men' or 'women'"),
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt"),
     unknown_aliases: Optional[Path] = typer.Option(
@@ -67,7 +75,9 @@ def import_cmd(
 ) -> None:
     """Import a round of lane-software scores, after showing a validation report."""
     conn = _connect(db_path)
-    report = build_import_report(conn, csv_path, division, round, block_game=game)
+    report = build_import_report(
+        conn, csv_path, division, round, block_game=game, swap_lanes=swap_lanes
+    )
 
     if unknown_aliases:
         write_unknown_aliases(unknown_aliases, division, report)

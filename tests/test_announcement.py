@@ -55,3 +55,48 @@ def test_announcement_order_and_adjacent_deltas():
     assert "Women 3 — 700 points" in output
     assert "200 ahead of the team below" in output
     assert output.index("3rd place women") < output.index("1st place men")
+
+
+def test_head_to_head_breaks_overall_points_tie():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    for round_number in (1, 2, 3):
+        conn.execute(
+            "INSERT INTO rounds (id, division, round_number) VALUES (?, 'men', ?)",
+            (round_number, round_number),
+        )
+    team_ids = {}
+    for number, name in ((1, "Alpha"), (2, "Beta"), (3, "Outside")):
+        team_ids[name] = conn.execute(
+            "INSERT INTO teams (division, team_number, name, team_size) VALUES "
+            "('men', ?, ?, 5)",
+            (number, name),
+        ).lastrowid
+
+    def add_fixture(number, first, second, first_points, second_points, first_pinfall, second_pinfall):
+        fixture_id = conn.execute(
+            "INSERT INTO fixtures (round_id, team_a_id, team_b_id, lane_a, lane_b) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (number, team_ids[first], team_ids[second], number * 2 - 1, number * 2),
+        ).lastrowid
+        for team, points, pinfall in (
+            (first, first_points, first_pinfall),
+            (second, second_points, second_pinfall),
+        ):
+            conn.execute(
+                "INSERT INTO match_points "
+                "(fixture_id, team_id, pinfall_total, bonus_points, team_bonus, total_points) "
+                "VALUES (?, ?, ?, 0, 0, ?)",
+                (fixture_id, team_ids[team], pinfall, points),
+            )
+
+    # Alpha wins the direct fixture, while Beta has the higher total pinfall.
+    add_fixture(1, "Alpha", "Beta", 60, 40, 100, 200)
+    add_fixture(2, "Outside", "Alpha", 10, 40, 100, 100)
+    add_fixture(3, "Beta", "Outside", 60, 10, 200, 100)
+    conn.commit()
+
+    from counties26.standings import team_standings
+
+    standings = team_standings(conn, "men")
+    assert [team.team_name for team in standings] == ["Alpha", "Beta", "Outside"]

@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from counties26.constants import require_division
+from counties26.standings import ranked_team_rows
 
 
 @dataclass(frozen=True)
@@ -21,19 +22,7 @@ class AnnouncementTeam:
 
 
 def _ranked_teams(conn: sqlite3.Connection, division: str) -> list[sqlite3.Row]:
-    return conn.execute(
-        """
-        SELECT t.id, t.name,
-               COALESCE(SUM(mp.total_points), 0) AS total_points,
-               COALESCE(SUM(mp.pinfall_total), 0) AS total_pinfall
-        FROM teams t
-        LEFT JOIN match_points mp ON mp.team_id = t.id
-        WHERE t.division = ?
-        GROUP BY t.id
-        ORDER BY total_points DESC, total_pinfall DESC, t.name ASC
-        """,
-        (division,),
-    ).fetchall()
+    return ranked_team_rows(conn, division)
 
 
 def announcement_teams(
@@ -48,7 +37,7 @@ def announcement_teams(
         below = rows[index + 1]["total_points"] if index + 1 < len(rows) else None
         players = conn.execute(
             "SELECT name FROM players WHERE team_id = ? ORDER BY play_position",
-            (row["id"],),
+            (row["team_id"],),
         ).fetchall()
         if not players:
             # A legacy database may predate roster import; still make the command useful.
@@ -59,13 +48,13 @@ def announcement_teams(
                 WHERE team_id = ?
                 ORDER BY name
                 """,
-                (row["id"],),
+                (row["team_id"],),
             ).fetchall()
         teams.append(
             AnnouncementTeam(
                 division=division,
                 place=index + 1,
-                team_name=row["name"],
+                    team_name=row["team_name"],
                 total_points=row["total_points"],
                 total_pinfall=row["total_pinfall"],
                 players=tuple(player["name"] for player in players),

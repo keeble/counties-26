@@ -49,7 +49,6 @@ class ImportReport:
     rows_in_file: int = 0
     rows_other_division: int = 0
     rows_other_game: int = 0
-    rows_team_mismatch: int = 0
     rows_player_mismatch: int = 0
     unknown_player_aliases: list[tuple[int, str, str]] = field(default_factory=list)
     rows_duplicate: int = 0
@@ -64,7 +63,6 @@ class ImportReport:
             f"Rows in file: {self.rows_in_file}",
             f"Ignored (other game in block): {self.rows_other_game}",
             f"Ignored (other division's lanes): {self.rows_other_division}",
-            f"Ignored (team name mismatch for that lane): {self.rows_team_mismatch}",
             f"Ignored (unrecognized player name): {self.rows_player_mismatch}",
             f"Already imported (duplicate): {self.rows_duplicate}",
             f"New rows to insert: {self.rows_new}",
@@ -78,7 +76,7 @@ class ImportReport:
 
 def parse_score_csv(path: str | Path) -> list[ScoreRow]:
     rows: list[ScoreRow] = []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
         for raw in reader:
             rows.append(
@@ -161,6 +159,7 @@ def build_import_report(
     division: str,
     round_number: int,
     block_game: int | None = None,
+    swap_lanes: bool = False,
 ) -> ImportReport:
     require_division(division)
     lanes = _lane_assignments(conn, division, round_number)
@@ -178,7 +177,53 @@ def build_import_report(
         return report
 
     matched_by_team: dict[int, list[ScoreRow]] = {}
+    observed_by_team: dict[int, list[ScoreRow]] = {}
     teams_with_data: set[tuple[int, int]] = set()
+    assignments_by_fixture: dict[int, list[LaneAssignment]] = {}
+    assignment_by_lane = dict(lanes)
+    lane_by_team = {assignment.team_id: lane for lane, assignment in lanes.items()}
+    roster_exists_by_team: dict[int, bool] = {}
+    for assignment in lanes.values():
+        assignments_by_fixture.setdefault(assignment.fixture_id, []).append(assignment)
+        if assignment.team_id not in roster_exists_by_team:
+            roster_exists_by_team[assignment.team_id] = conn.execute(
+                "SELECT 1 FROM players WHERE team_id = ? LIMIT 1",
+                (assignment.team_id,),
+            ).fetchone() is not None
+
+    rows_for_orientation = [
+        row
+        for row in rows
+        if (block_game is None or row.game_number is None or row.game_number == block_game)
+        and row.lane in division_lanes
+    ]
+    for fixture_id, pair in assignments_by_fixture.items():
+        if swap_lanes:
+            assignment_by_lane[lane_by_team[pair[0].team_id]] = pair[1]
+            assignment_by_lane[lane_by_team[pair[1].team_id]] = pair[0]
+            continue
+        if not all(roster_exists_by_team[assignment.team_id] for assignment in pair):
+            continue
+        lane_rows = {
+            assignment.team_id: [
+                row for row in rows_for_orientation
+                if row.lane == lane_by_team[assignment.team_id]
+            ]
+            for assignment in pair
+        }
+        normal_score = sum(
+            resolve_player_name(conn, pair[index].team_id, row.bowler_name) is not None
+            for index, assignment in enumerate(pair)
+            for row in lane_rows.get(assignment.team_id, [])
+        )
+        swapped_score = sum(
+            resolve_player_name(conn, pair[1 - index].team_id, row.bowler_name) is not None
+            for index, assignment in enumerate(pair)
+            for row in lane_rows.get(assignment.team_id, [])
+        )
+        if swapped_score > normal_score:
+            assignment_by_lane[lane_by_team[pair[0].team_id]] = pair[1]
+            assignment_by_lane[lane_by_team[pair[1].team_id]] = pair[0]
 
     for row in rows:
         if block_game is not None and row.game_number is not None and row.game_number != block_game:
@@ -187,21 +232,11 @@ def build_import_report(
         if row.lane not in division_lanes:
             report.rows_other_division += 1
             continue
-        assignment = lanes[row.lane]
-        if row.team_name.strip().lower() != assignment.team_name.strip().lower():
-            report.rows_team_mismatch += 1
-            report.warnings.append(
-                f"Lane {row.lane}: expected team {assignment.team_name!r}, "
-                f"CSV says {row.team_name!r} — row ignored"
-            )
-            continue
-
+        assignment = assignment_by_lane[row.lane]
+        teams_with_data.add((assignment.fixture_id, assignment.team_id))
+        observed_by_team.setdefault(assignment.team_id, []).append(row)
         canonical_name = resolve_player_name(conn, assignment.team_id, row.bowler_name)
-        roster_exists = conn.execute(
-            "SELECT 1 FROM players WHERE team_id = ? LIMIT 1",
-            (assignment.team_id,),
-        ).fetchone()
-        if roster_exists and canonical_name is None:
+        if roster_exists_by_team[assignment.team_id] and canonical_name is None:
             report.rows_player_mismatch += 1
             unknown = (assignment.team_number, assignment.team_name, row.bowler_name)
             if unknown not in report.unknown_player_aliases:
@@ -216,7 +251,6 @@ def build_import_report(
 
             row = replace(row, bowler_name=canonical_name)
 
-        teams_with_data.add((assignment.fixture_id, assignment.team_id))
         if _already_imported(conn, assignment.team_id, row.bowler_name, row.start_date):
             report.rows_duplicate += 1
             continue
@@ -241,7 +275,7 @@ def build_import_report(
     # Team size / play position sanity checks, per team that had any new rows.
     team_names_by_id = {a.team_id: a.team_name for a in lanes.values()}
     team_size_by_id = {a.team_id: a.team_size for a in lanes.values()}
-    for team_id, team_rows in matched_by_team.items():
+    for team_id, team_rows in observed_by_team.items():
         positions = [r.play_position for r in team_rows]
         expected_size = team_size_by_id[team_id]
         if len(positions) != expected_size:

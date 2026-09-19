@@ -19,8 +19,8 @@ round, computes standings, and builds a static site for publishing to GitHub Pag
 pip install -e ".[test]"
 
 # One-time: import the draw for each division
-counties26 import-draw men_draw.csv men_teams.csv --players men_players.csv --division men
-counties26 import-draw women_draw.csv women_teams.csv --players women_players.csv --division women
+counties26 import-draw men_draw.csv men_teams.csv --players men_players.csv --division men --first-lane 1
+counties26 import-draw women_draw.csv women_teams.csv --players women_players.csv --division women --first-lane 11
 
 # Add a centre-export abbreviation for a registered player
 counties26 add-alias "Laura M" --division women --team-number 15 \
@@ -30,6 +30,9 @@ counties26 add-alias "Laura M" --division women --team-number 15 \
 # `--game` selects that game within the centre's cumulative export block.
 counties26 import scores.csv --round 4 --game 1 --division men \
   --unknown-aliases unknown_players.csv
+
+# If roster matching is unavailable and this game used the opposite lane side
+counties26 import scores.csv --round 5 --game 2 --division men --swap-lanes
 
 # After editing unknown_players.csv to fill in player_name values
 counties26 add-aliases unknown_players.csv
@@ -46,6 +49,12 @@ registered roster and aliases. Matching tries known aliases, a unique first name
 a unique first name plus second-name initial, then a unique surname. Unknown or
 ambiguous names are reported and excluded when a team roster exists, rather than
 guessed. `--unknown-aliases` writes those names to an editable CSV.
+
+When teams swap the two physical lanes in a match, the importer uses the resolved
+player names and the selected draw to assign each score to the correct team; lane
+side does not determine team identity. This is evaluated independently for each
+fixture. Use `--swap-lanes` only as a forced override when roster matching cannot
+resolve the orientation.
 
 ```bash
 pytest

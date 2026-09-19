@@ -27,19 +27,29 @@ def add_player_alias(
     if not alias or not player_name:
         raise ValueError("Player name and alias must not be empty")
 
-    player = conn.execute(
+    team = conn.execute(
         """
-        SELECT p.id, p.name
-        FROM players p
-        JOIN teams t ON t.id = p.team_id
-        WHERE t.division = ? AND t.team_number = ? AND lower(p.name) = lower(?)
+        SELECT id
+        FROM teams
+        WHERE division = ? AND team_number = ?
         """,
-        (division, team_number, player_name),
+        (division, team_number),
     ).fetchone()
-    if player is None:
+    if team is None:
         raise ValueError(
-            f"No registered player {player_name!r} found on {division} team {team_number}"
+            f"No registered team {team_number} found in {division} division"
         )
+
+    canonical_name = resolve_player_name(conn, team["id"], player_name)
+    if canonical_name is None:
+        raise ValueError(
+            f"Could not uniquely resolve player {player_name!r} on "
+            f"{division} team {team_number}; use the full registered name"
+        )
+    player = conn.execute(
+        "SELECT id FROM players WHERE team_id = ? AND name = ?",
+        (team["id"], canonical_name),
+    ).fetchone()
 
     normalized = normalize_player_name(alias)
     if not normalized:

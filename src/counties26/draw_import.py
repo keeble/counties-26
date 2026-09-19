@@ -27,14 +27,13 @@ class TeamInfo:
 @dataclass(frozen=True)
 class PlayerInfo:
     team_number: int
-    play_position: int
     name: str
 
 
 def parse_grid(path: str | Path) -> list[list[int]]:
     """Parse the lane draw grid: one row per round, one column per lane."""
     rows: list[list[int]] = []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8-sig") as fh:
         reader = csv.reader(fh)
         for raw_row in reader:
             values = [cell.strip() for cell in raw_row if cell.strip() != ""]
@@ -47,7 +46,7 @@ def parse_grid(path: str | Path) -> list[list[int]]:
 def parse_team_registry(path: str | Path, default_team_size: int) -> dict[int, TeamInfo]:
     """Parse team_number,team_name[,team_size] -> TeamInfo, keyed by team_number."""
     teams: dict[int, TeamInfo] = {}
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
             team_number = int(row["team_number"])
@@ -59,15 +58,17 @@ def parse_team_registry(path: str | Path, default_team_size: int) -> dict[int, T
 
 
 def parse_player_registry(path: str | Path) -> list[PlayerInfo]:
-    """Parse team_number,play_position,player_name rows for the starting roster."""
+    """Parse team_number,player_name rows for the starting roster.
+
+    An older optional play_position column is accepted and ignored.
+    """
     players: list[PlayerInfo] = []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
             players.append(
                 PlayerInfo(
                     team_number=int(row["team_number"]),
-                    play_position=int(row["play_position"]),
                     name=row["player_name"].strip(),
                 )
             )
@@ -127,9 +128,12 @@ def import_draw(
     teams_path: str | Path,
     division: str,
     players_path: str | Path | None = None,
+    first_lane: int = 1,
 ) -> list[str]:
     """Import a division's draw. Returns validation warnings (import still proceeds)."""
     require_division(division)
+    if first_lane < 1:
+        raise ValueError("first_lane must be at least 1")
     default_team_size = DIVISION_CONFIG[division].team_size
 
     rows = parse_grid(grid_path)
@@ -176,7 +180,8 @@ def import_draw(
             ),
             tuple(player_team_ids),
         )
-        positions_by_team: dict[int, set[int]] = {}
+        roster_order_by_team: dict[int, int] = {}
+        names_by_team: dict[int, set[str]] = {}
         for player in players:
             if player.team_number not in team_id_by_number:
                 warnings.append(
@@ -185,33 +190,23 @@ def import_draw(
                 )
                 continue
             team_id = team_id_by_number[player.team_number]
-            team_size = teams[player.team_number].team_size
-            if not 1 <= player.play_position <= team_size:
+            if not player.name:
+                warnings.append(f"Team {player.team_number} has a blank player name")
+                continue
+            names = names_by_team.setdefault(team_id, set())
+            name_key = player.name.casefold()
+            if name_key in names:
                 warnings.append(
-                    f"{player.name!r} on team {player.team_number} has play position "
-                    f"{player.play_position}; expected 1-{team_size}"
+                    f"Team {player.team_number} has duplicate player name {player.name!r}"
                 )
                 continue
-            positions = positions_by_team.setdefault(team_id, set())
-            if player.play_position in positions:
-                warnings.append(
-                    f"Team {player.team_number} has duplicate player position "
-                    f"{player.play_position}"
-                )
-                continue
-            positions.add(player.play_position)
+            names.add(name_key)
+            roster_order = roster_order_by_team.get(team_id, 0) + 1
+            roster_order_by_team[team_id] = roster_order
             conn.execute(
                 "INSERT INTO players (team_id, play_position, name) VALUES (?, ?, ?)",
-                (team_id, player.play_position, player.name),
+                (team_id, roster_order, player.name),
             )
-        for team_number, info in teams.items():
-            if team_number in team_numbers_in_grid:
-                actual = len(positions_by_team.get(team_id_by_number[team_number], set()))
-                if actual != info.team_size:
-                    warnings.append(
-                        f"Team {team_number} roster has {actual} players, "
-                        f"expected {info.team_size}"
-                    )
 
     for round_number, row in enumerate(rows, start=1):
         round_id = conn.execute(
@@ -231,8 +226,8 @@ def import_draw(
                     round_id,
                     team_id_by_number[team_a_number],
                     team_id_by_number[team_b_number],
-                    i + 1,
-                    i + 2,
+                    first_lane + i,
+                    first_lane + i + 1,
                 ),
             )
     conn.commit()

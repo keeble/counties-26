@@ -36,6 +36,17 @@ def test_player_name_fallbacks_match_unique_first_initial():
     assert resolve_player_name(conn, team_id, "Ben C") == "Ben Carter"
 
 
+def test_add_alias_resolves_short_canonical_player_name():
+    conn, team_id = _connection_with_roster()
+    add_player_alias(conn, "men", 1, "Ben", "B")
+
+    alias = conn.execute(
+        "SELECT pa.alias, p.name FROM player_aliases pa "
+        "JOIN players p ON p.id = pa.player_id"
+    ).fetchone()
+    assert (alias["alias"], alias["name"]) == ("B", "Ben Carter")
+
+
 def test_player_name_alias_and_canonical_match_take_priority():
     conn, team_id = _connection_with_roster()
     add_player_alias(conn, "men", 1, "Gareth Jones", "GJ")
