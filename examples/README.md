@@ -27,6 +27,27 @@ them. The original centre export does include that column and will be filtered b
 Each score file has the correct lineup size, so the import should report no warnings.
 Re-run either import command to see duplicate detection.
 
+To teach the importer a known centre abbreviation, add it once after importing
+the roster:
+
+```bash
+counties26 add-alias "Alex M" --division men --team-number 1 \
+  --player "Alex Morgan" --db examples/dummy.db
+```
+
+Future score imports automatically resolve `Alex M` to `Alex Morgan`; no mapping
+file is required. Unknown names are highlighted and excluded when a team roster
+exists.
+
+For unknown names, ask the importer to create an editable alias file:
+
+```bash
+counties26 import scores.csv --round 1 --game 1 --division men \
+  --unknown-aliases unknown_players.csv --db examples/dummy.db
+# Fill in the player_name column, then:
+counties26 add-aliases unknown_players.csv --db examples/dummy.db
+```
+
 The player registry files use this format:
 
 ```text
@@ -37,3 +58,10 @@ team_number,play_position,player_name
 The roster is imported with the draw and appears on each team's page. The centre
 export remains the source of the names attached to actual scores, which allows
 substitutes to be recorded when necessary.
+
+Add a known centre abbreviation once, after importing the roster:
+
+```bash
+counties26 add-alias "Alex M" --division men --team-number 1 \
+  --player "Alex Morgan" --db examples/dummy.db
+```

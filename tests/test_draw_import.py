@@ -4,6 +4,7 @@ import pytest
 
 from counties26 import db
 from counties26.draw_import import import_draw, parse_player_registry, validate_round_robin
+from counties26.players import add_player_alias
 
 # A verified complete single round robin for 10 teams: 9 rounds, no header row/column,
 # column position is the lane number.
@@ -103,3 +104,29 @@ def test_import_draw_loads_starting_player_roster(tmp_path):
         "WHERE t.team_number = 1 ORDER BY p.play_position"
     ).fetchall()
     assert [row["name"] for row in players] == ["Alice Example", "Bob Example"]
+
+
+def test_add_player_alias_is_normalized_and_idempotent(tmp_path):
+    grid_path = tmp_path / "grid.csv"
+    teams_path = tmp_path / "teams.csv"
+    players_path = tmp_path / "players.csv"
+    _write_grid(grid_path, [[1, 2]])
+    _write_teams(teams_path, 2)
+    players_path.write_text(
+        "team_number,play_position,player_name\n"
+        "1,1,Alice Example\n1,2,Bob Example\n"
+        "2,1,Carol Example\n2,2,Dan Example\n"
+    )
+
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    import_draw(conn, grid_path, teams_path, "men", players_path)
+
+    add_player_alias(conn, "men", 1, "Alice Example", "A. Example")
+    add_player_alias(conn, "men", 1, "Alice Example", "a example")
+    aliases = conn.execute(
+        "SELECT alias, alias_normalized FROM player_aliases ORDER BY alias"
+    ).fetchall()
+    assert [(row["alias"], row["alias_normalized"]) for row in aliases] == [
+        ("a example", "aexample"),
+    ]

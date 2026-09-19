@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS players (
     UNIQUE (team_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS player_aliases (
+    id INTEGER PRIMARY KEY,
+    player_id INTEGER NOT NULL REFERENCES players (id) ON DELETE CASCADE,
+    alias TEXT NOT NULL,
+    alias_normalized TEXT NOT NULL,
+    UNIQUE (player_id, alias_normalized)
+);
+
 CREATE TABLE IF NOT EXISTS rounds (
     id INTEGER PRIMARY KEY,
     division TEXT NOT NULL CHECK (division IN ('men', 'women')),

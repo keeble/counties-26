@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from typing import Optional
 
@@ -9,7 +10,8 @@ import typer
 
 from counties26 import db
 from counties26.draw_import import import_draw
-from counties26.importer import build_import_report, commit_import
+from counties26.importer import build_import_report, commit_import, write_unknown_aliases
+from counties26.players import add_player_alias
 from counties26.site.generate import build_site as _build_site
 from counties26.standings import bowler_stats, team_standings
 
@@ -55,11 +57,20 @@ def import_cmd(
     ),
     division: str = typer.Option(..., help="'men' or 'women'"),
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt"),
+    unknown_aliases: Optional[Path] = typer.Option(
+        None,
+        "--unknown-aliases",
+        help="Write unresolved player names to an editable CSV",
+    ),
     db_path: Path = DB_OPTION,
 ) -> None:
     """Import a round of lane-software scores, after showing a validation report."""
     conn = _connect(db_path)
     report = build_import_report(conn, csv_path, division, round, block_game=game)
+
+    if unknown_aliases:
+        write_unknown_aliases(unknown_aliases, division, report)
+        typer.echo(f"Unknown player names written to {unknown_aliases}")
 
     typer.echo(report.summary())
     if report.rows_new == 0:
@@ -74,6 +85,60 @@ def import_cmd(
     typer.secho(f"Imported {report.rows_new} new bowler scores.", fg=typer.colors.GREEN)
     for note in notes:
         typer.secho(f"  - {note}", fg=typer.colors.YELLOW)
+
+
+@app.command("add-alias")
+def add_alias_cmd(
+    alias: str,
+    division: str = typer.Option(..., help="'men' or 'women'"),
+    team_number: int = typer.Option(..., "--team-number", help="Registered team number"),
+    player_name: str = typer.Option(..., "--player", help="Canonical registered player name"),
+    db_path: Path = DB_OPTION,
+) -> None:
+    """Remember a bowling-centre name or abbreviation for a registered player."""
+    conn = _connect(db_path)
+    try:
+        add_player_alias(conn, division, team_number, player_name, alias)
+    except ValueError as error:
+        typer.secho(str(error), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from error
+    typer.secho(
+        f"Added alias {alias!r} for {player_name!r} on team {team_number}.",
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command("add-aliases")
+def add_aliases_cmd(
+    aliases_csv: Path,
+    db_path: Path = DB_OPTION,
+) -> None:
+    """Add aliases from an edited unknown-player CSV."""
+    conn = _connect(db_path)
+    added = 0
+    with open(aliases_csv, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            player_name = row.get("player_name", "").strip()
+            if not player_name:
+                typer.secho(
+                    f"Missing player_name for alias {row.get('alias', '')!r}",
+                    fg=typer.colors.RED,
+                    err=True,
+                )
+                raise typer.Exit(code=2)
+            try:
+                add_player_alias(
+                    conn,
+                    row["division"].strip(),
+                    int(row["team_number"]),
+                    player_name,
+                    row["alias"].strip(),
+                )
+            except (KeyError, ValueError) as error:
+                typer.secho(str(error), fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2) from error
+            added += 1
+    typer.secho(f"Added or updated {added} aliases.", fg=typer.colors.GREEN)
 
 
 @app.command("show-standings")

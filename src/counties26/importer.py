@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from counties26.constants import require_division
+from counties26.players import resolve_player_name
 from counties26.results import recompute_fixture
 
 
@@ -38,6 +39,7 @@ class ScoreRow:
 class LaneAssignment:
     fixture_id: int
     team_id: int
+    team_number: int
     team_name: str
     team_size: int
 
@@ -48,6 +50,8 @@ class ImportReport:
     rows_other_division: int = 0
     rows_other_game: int = 0
     rows_team_mismatch: int = 0
+    rows_player_mismatch: int = 0
+    unknown_player_aliases: list[tuple[int, str, str]] = field(default_factory=list)
     rows_duplicate: int = 0
     rows_new: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -61,6 +65,7 @@ class ImportReport:
             f"Ignored (other game in block): {self.rows_other_game}",
             f"Ignored (other division's lanes): {self.rows_other_division}",
             f"Ignored (team name mismatch for that lane): {self.rows_team_mismatch}",
+            f"Ignored (unrecognized player name): {self.rows_player_mismatch}",
             f"Already imported (duplicate): {self.rows_duplicate}",
             f"New rows to insert: {self.rows_new}",
         ]
@@ -111,8 +116,10 @@ def _lane_assignments(
     fixtures = conn.execute(
         """
         SELECT f.id AS fixture_id, f.lane_a, f.lane_b,
-               ta.id AS team_a_id, ta.name AS team_a_name, ta.team_size AS team_a_size,
-               tb.id AS team_b_id, tb.name AS team_b_name, tb.team_size AS team_b_size
+               ta.id AS team_a_id, ta.team_number AS team_a_number,
+               ta.name AS team_a_name, ta.team_size AS team_a_size,
+               tb.id AS team_b_id, tb.team_number AS team_b_number,
+               tb.name AS team_b_name, tb.team_size AS team_b_size
         FROM fixtures f
         JOIN teams ta ON ta.id = f.team_a_id
         JOIN teams tb ON tb.id = f.team_b_id
@@ -126,12 +133,14 @@ def _lane_assignments(
         lanes[fx["lane_a"]] = LaneAssignment(
             fixture_id=fx["fixture_id"],
             team_id=fx["team_a_id"],
+            team_number=fx["team_a_number"],
             team_name=fx["team_a_name"],
             team_size=fx["team_a_size"],
         )
         lanes[fx["lane_b"]] = LaneAssignment(
             fixture_id=fx["fixture_id"],
             team_id=fx["team_b_id"],
+            team_number=fx["team_b_number"],
             team_name=fx["team_b_name"],
             team_size=fx["team_b_size"],
         )
@@ -187,6 +196,26 @@ def build_import_report(
             )
             continue
 
+        canonical_name = resolve_player_name(conn, assignment.team_id, row.bowler_name)
+        roster_exists = conn.execute(
+            "SELECT 1 FROM players WHERE team_id = ? LIMIT 1",
+            (assignment.team_id,),
+        ).fetchone()
+        if roster_exists and canonical_name is None:
+            report.rows_player_mismatch += 1
+            unknown = (assignment.team_number, assignment.team_name, row.bowler_name)
+            if unknown not in report.unknown_player_aliases:
+                report.unknown_player_aliases.append(unknown)
+            report.warnings.append(
+                f"Team {assignment.team_name!r}: player name {row.bowler_name!r} "
+                "does not match a registered name or known alias — row ignored"
+            )
+            continue
+        if canonical_name is not None:
+            from dataclasses import replace
+
+            row = replace(row, bowler_name=canonical_name)
+
         teams_with_data.add((assignment.fixture_id, assignment.team_id))
         if _already_imported(conn, assignment.team_id, row.bowler_name, row.start_date):
             report.rows_duplicate += 1
@@ -226,6 +255,17 @@ def build_import_report(
             )
 
     return report
+
+
+def write_unknown_aliases(
+    path: str | Path, division: str, report: ImportReport
+) -> None:
+    """Write unresolved centre names as rows ready for canonical player entry."""
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["division", "team_number", "team_name", "alias", "player_name"])
+        for team_number, team_name, alias in report.unknown_player_aliases:
+            writer.writerow([division, team_number, team_name, alias, ""])
 
 
 def commit_import(conn: sqlite3.Connection, csv_path: str | Path, report: ImportReport) -> list[str]:
