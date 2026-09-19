@@ -16,7 +16,7 @@
 <nav class="topbar" aria-label="Competition navigation"><a class="wordmark" href="index.html">County / 26</a><span><a href="men.html" {% if division == 'men' %}aria-current="page"{% endif %}>Men</a><a href="women.html" {% if division == 'women' %}aria-current="page"{% endif %}>Women</a></span></nav>
 <header class="page-header"><p class="eyebrow">{{ division_title }} competition</p><h1>Standings &amp; scorecards</h1><p>Team points at a glance, then the complete lane-by-lane story of every round.</p></header>
 <section class="section-block"><div class="section-heading"><div><p class="eyebrow">01 / leaderboard</p><h2>Team standings</h2></div><span class="section-note">{{ standings|length }} teams</span></div>
-<table class="data-table mobile-stack">
+<table class="data-table standings-table">
   <thead>
     <tr><th scope="col">Team</th><th scope="col">Played</th><th scope="col">Points</th><th scope="col">Pinfall</th></tr>
   </thead>
